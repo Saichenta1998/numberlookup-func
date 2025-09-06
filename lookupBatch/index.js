@@ -105,18 +105,13 @@ async function writeCsv(accountName, accountKey, container, blob, content) {
   const res = await httpRequest("PUT", url, headers, content);
   if (!(res.status === 201 || res.status === 200)) throw new Error(`Blob PUT failed ${res.status}: ${res.body}`);
 }
-async function numberLookup(acsEndpoint, acsAccessKeyBase64, numbers) {
+async function numberLookup(acsEndpoint, acsAccessKeyBase64, number) {
   const pathAndQuery = "/operatorInformation/:search?api-version=2025-06-01";
   const base = acsEndpoint.replace(/\/+$/, "");
   const url = `${base}${pathAndQuery}`;
   const host = new URL(base).host;
 
-  // DEBUG LOGS
-  console.log("ACS base:", base);
-  console.log("ACS host:", host);
-  console.log("ACS URL :", url);
-
-  const bodyObj = { phoneNumbers: numbers, options: { includeAdditionalOperatorDetails: true } };
+  const bodyObj = { phoneNumber: number, options: { includeAdditionalOperatorDetails: true } };
   const body = JSON.stringify(bodyObj);
   const contentHash = sha256Base64(body);
   const date = rfc1123Now();
@@ -136,7 +131,10 @@ async function numberLookup(acsEndpoint, acsAccessKeyBase64, numbers) {
   const res = await httpRequest("POST", url, headers, body);
   if (res.status !== 200) throw new Error(`ACS lookup failed ${res.status}: ${res.body}`);
   const parsed = JSON.parse(res.body);
-  return parsed.values || [];
+  // Normalize to an array
+  if (Array.isArray(parsed.values)) return parsed.values;
+  if (parsed.value) return [parsed.value];
+  return [parsed];
 }
 function parseNumbers(csvText) {
   const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -187,10 +185,10 @@ module.exports = async function (context, req) {
     const chunks = [];
     for (let i = 0; i < numbers.length; i += 100) chunks.push(numbers.slice(i, i + 100));
     const allResults = [];
-    for (const chunk of chunks) {
-      const vals = await numberLookup(acsEndpoint, acsKey, chunk);
-      allResults.push(...vals);
-    }
+for (const num of numbers) {
+  const vals = await numberLookup(acsEndpoint, acsKey, num);
+  allResults.push(...vals);
+}  
     const outCsv = toCsv(allResults);
     await writeCsv(accountName, accountKey, BLOB_CONTAINER, outputBlob, outCsv);
     context.res = {
