@@ -106,23 +106,33 @@ async function writeCsv(accountName, accountKey, container, blob, content) {
   if (!(res.status === 201 || res.status === 200)) throw new Error(`Blob PUT failed ${res.status}: ${res.body}`);
 }
 async function numberLookup(acsEndpoint, acsAccessKeyBase64, numbers) {
-  const pathAndQuery = "/operatorInformation:search?api-version=2025-06-01";
-  const url = `${acsEndpoint.replace(/\/+$/, "")}${pathAndQuery}`;
+  const pathAndQuery = "/operatorInformation/:search?api-version=2025-06-01";
+  const base = acsEndpoint.replace(/\/+$/, "");
+  const url = `${base}${pathAndQuery}`;
+  const host = new URL(base).host;
+
+  // DEBUG LOGS
+  console.log("ACS base:", base);
+  console.log("ACS host:", host);
+  console.log("ACS URL :", url);
+
   const bodyObj = { phoneNumbers: numbers, options: { includeAdditionalOperatorDetails: true } };
   const body = JSON.stringify(bodyObj);
   const contentHash = sha256Base64(body);
   const date = rfc1123Now();
-  const host = new URL(acsEndpoint).host;
+
   const stringToSign = `POST\n${pathAndQuery}\n${date};${host};${contentHash}`;
   const signature = hmacSHA256Base64(acsAccessKeyBase64, stringToSign);
   const auth = `HMAC-SHA256 SignedHeaders=x-ms-date;host;x-ms-content-sha256&Signature=${signature}`;
+
   const headers = {
     "Content-Type": "application/json",
     "x-ms-date": date,
     "x-ms-content-sha256": contentHash,
     Authorization: auth,
-    Host: host,
+    Host: host
   };
+
   const res = await httpRequest("POST", url, headers, body);
   if (res.status !== 200) throw new Error(`ACS lookup failed ${res.status}: ${res.body}`);
   const parsed = JSON.parse(res.body);
