@@ -105,13 +105,14 @@ async function writeCsv(accountName, accountKey, container, blob, content) {
   const res = await httpRequest("PUT", url, headers, content);
   if (!(res.status === 201 || res.status === 200)) throw new Error(`Blob PUT failed ${res.status}: ${res.body}`);
 }
-async function numberLookup(acsEndpoint, acsAccessKeyBase64, number) {
+// Calls ACS Operator Information Search with a *list* of E.164 numbers
+async function numberLookup(acsEndpoint, acsAccessKeyBase64, numbers) {
   const pathAndQuery = "/operatorInformation/:search?api-version=2025-06-01";
   const base = acsEndpoint.replace(/\/+$/, "");
   const url = `${base}${pathAndQuery}`;
   const host = new URL(base).host;
 
-  const bodyObj = { phoneNumber: number, options: { includeAdditionalOperatorDetails: true } };
+  const bodyObj = { phoneNumbers: numbers, options: { includeAdditionalOperatorDetails: true } };
   const body = JSON.stringify(bodyObj);
   const contentHash = sha256Base64(body);
   const date = rfc1123Now();
@@ -131,11 +132,9 @@ async function numberLookup(acsEndpoint, acsAccessKeyBase64, number) {
   const res = await httpRequest("POST", url, headers, body);
   if (res.status !== 200) throw new Error(`ACS lookup failed ${res.status}: ${res.body}`);
   const parsed = JSON.parse(res.body);
-  // Normalize to an array
-  if (Array.isArray(parsed.values)) return parsed.values;
-  if (parsed.value) return [parsed.value];
-  return [parsed];
+  return parsed.values || [];
 }
+
 function parseNumbers(csvText) {
   const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
@@ -182,9 +181,13 @@ module.exports = async function (context, req) {
     const csvIn = await readCsv(accountName, accountKey, BLOB_CONTAINER, inputBlob);
     const numbers = parseNumbers(csvIn);
     if (numbers.length === 0) throw new Error("No numbers found in CSV.");
-    const chunks = [];
-    for (let i = 0; i < numbers.length; i += 100) chunks.push(numbers.slice(i, i + 100));
     const allResults = [];
+// Send up to 100 numbers per request
+for (let i = 0; i < numbers.length; i += 100) {
+  const chunk = numbers.slice(i, i + 100);
+  const vals = await numberLookup(acsEndpoint, acsKey, chunk);
+  allResults.push(...vals);
+}
 for (const num of numbers) {
   const vals = await numberLookup(acsEndpoint, acsKey, num);
   allResults.push(...vals);
