@@ -136,6 +136,7 @@ async function numberLookup(acsEndpoint, acsAccessKeyBase64, numbers) {
 }
 
 function parseNumbers(csvText) {
+  csvText = csvText.replace(/^\uFEFF/, "");
   const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
   const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
@@ -183,13 +184,11 @@ module.exports = async function (context, req) {
     if (numbers.length === 0) throw new Error("No numbers found in CSV.");
     const allResults = [];
 // Send up to 100 numbers per request
+context.log("parsed numbers count:", numbers.length, "example:", numbers[0]);
+
 for (let i = 0; i < numbers.length; i += 100) {
   const chunk = numbers.slice(i, i + 100);
   const vals = await numberLookup(acsEndpoint, acsKey, chunk);
-  allResults.push(...vals);
-}
-for (const num of numbers) {
-  const vals = await numberLookup(acsEndpoint, acsKey, num);
   allResults.push(...vals);
 }  
     const outCsv = toCsv(allResults);
