@@ -1,0 +1,7 @@
+﻿{
+  "name": "numberlookup-func-weu",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=20.x" },
+  "scripts": { "build": "echo no-build", "start": "func start" }
+}
